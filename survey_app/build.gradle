@@ -1,0 +1,163 @@
+/**************************************************************************************************
+ GRADLE CONFIG
+ *************************************************************************************************/
+
+if ((new File(gradle.local)).exists()) {
+    apply from: gradle.local
+} else {
+    apply from: gradle.remote
+}
+
+applicationScripts.each {
+    apply from: it
+}
+
+apply plugin: 'com.android.application'
+
+android {
+    // The following are set in the common.gradle file
+    compileSdkVersion(compileVersion)
+    buildToolsVersion(buildTools)
+
+    defaultConfig {
+        applicationId(groupId + surveyName)
+        minSdkVersion(minVersion)
+        targetSdkVersion(targetVersion)
+        versionCode(releaseVersionCode)
+        versionName(versionCodeName)
+        testInstrumentationRunner(instrumentationRunner)
+        multiDexEnabled true
+    }
+
+    flavorDimensions "stage", "testing"
+
+    productFlavors {
+        demo {
+            dimension 'stage'
+        }
+
+        master {
+            dimension 'stage'
+        }
+
+        snapshot {
+            dimension 'stage'
+        }
+
+        basic {
+            dimension 'testing'
+        }
+
+        uitest {
+            minSdkVersion(uitestMinSDK)
+            dimension 'testing'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (shouldSign) {
+                storeFile file(signStoreFilePath)
+                storePassword signStorePass
+                keyAlias signKeyAlias
+                keyPassword signKeyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled(minify)
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+
+            if (shouldSign) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            debuggable(true)
+            testCoverageEnabled(testCoverage) // Allows AndroidTest JaCoCo reports to be generated
+        }
+    }
+
+    dexOptions {
+        javaMaxHeapSize "2g"
+    }
+
+    packagingOptions {
+        // Pick first occurrence of any files that cause conflicts, as defined in common.gradle
+        packageList.each {
+            pickFirst it
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility javaVersion
+        targetCompatibility javaVersion
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        cacheDynamicVersionsFor(0, 'seconds')
+        cacheChangingModulesFor(0, 'seconds')
+    }
+}
+
+allprojects {
+    tasks.withType(JavaCompile) {
+        options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+    }
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.2.0'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.preference:preference:1.1.1'
+    implementation 'androidx.fragment:fragment:1.3.2'
+    implementation 'com.google.android.material:material:1.3.0'
+    
+    implementation 'com.google.firebase:firebase-analytics:18.0.2'
+    implementation 'com.google.firebase:firebase-crashlytics:17.4.1'
+
+    implementation 'androidx.multidex:multidex:2.0.1'
+
+    if (libraryProjectPath.exists() && gradle.useLocal) { // Local project is favoured
+        implementation project(libraryProjectName)
+    } else {
+        demoImplementation(group: groupId, name: libraryDemoArtifactName, classifier: demoRelease,
+                version: latestVersion, ext: 'aar')
+        masterImplementation(group: groupId, name: libraryMasterArtifactName, classifier: masterRelease,
+                version: masterArtifactVersion, ext: 'aar')
+        snapshotImplementation(group: groupId, name: librarySnapshotArtifactName,
+                classifier: snapshotRelease, version: latestVersion, ext: 'aar')
+    }
+
+    if (commonProjectPath.exists() && gradle.useLocal) { // Local project is favoured
+        implementation project(commonProjectName)
+    } else {
+        demoImplementation(group: groupId, name: commonDemoArtifactName, classifier: demoRelease,
+                version: latestVersion, ext: 'aar')
+        masterImplementation(group: groupId, name: commonMasterArtifactName, classifier: masterRelease,
+                version: masterArtifactVersion, ext: 'aar')
+        snapshotImplementation(group: groupId, name: commonSnapshotArtifactName,
+                classifier: snapshotRelease, version: latestVersion, ext: 'aar')
+    }
+
+    // Testing dependencies
+    testImplementation 'junit:junit:4.13.1'
+
+    androidTestImplementation 'androidx.test:runner:1.3.0'
+    androidTestImplementation 'androidx.test:rules:1.3.0'
+    androidTestImplementation 'androidx.annotation:annotation:1.2.0'
+
+}
+
+task grantPermissionForODKApp {
+    dependsOn grantServicesReadExternalStoragePermission
+    dependsOn grantServicesWriteExternalStoragePermission
+}
+
+apply plugin: 'com.google.gms.google-services'
+apply plugin: 'com.google.firebase.crashlytics'
